@@ -1,0 +1,45 @@
+version: "2.4"
+
+volumes:
+  state: {}
+
+services:
+  keycloak-db:
+    image: postgres:11.6-alpine
+    mem_limit: 256m
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:17.0.0
+    command: start --auto-build --hostname-strict=false --hostname-strict-https=false --http-enabled=true --metrics-enabled=true --db=postgres
+    environment:
+      KC_DB_URL: jdbc:postgresql://keycloak-db/postgres
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: testing
+      KC_HTTP_PORT: 11000
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: Password123
+    healthcheck:
+      test: curl -s -f localhost:11000/health || exit 1
+      interval: 1s
+      retries: 30
+    ports:
+      - "11000:11000"
+    depends_on:
+      - keycloak-db
+  
+  beeboard-api:
+    build: .
+    command: npm run dev
+    image: beeboard-api
+    container_name: beeboard-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/usr/app/
+      - /usr/app/node_modules
+    depends_on:
+      - keycloak-db
+      - keycloak
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres@keycloak-db/postgres
